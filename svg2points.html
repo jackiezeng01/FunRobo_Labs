@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>svg2points</title>
+</head>
+<body>
+    <input id="upload" type="file" accept="image/svg+xml"/>
+<a id="download">Download</a>
+
+<div id="svg">
+  
+</div>
+
+<script>
+// final output is a CSV with X and Y columns
+// where it is all the points ordered by path
+// with -1 [0|1] indicating a laser command
+
+const upload = document.getElementById('upload');
+const svgDOM = document.getElementById('svg');
+const download = document.getElementById('download');
+
+//0-100
+intervals = [...Array(101).keys()].map(i => i/100);
+//intervals = [0, 0.5, 1];
+
+// convert SVG point to a vector
+const point2vec = p => {
+  return [p.x, p.y]
+}
+
+// get 101 evenly spaced points along SVG path
+const pathToPoints = el => {
+  length = el.getTotalLength();
+  console.log(intervals, el, el.getPointAtLength(0), el.getPointAtLength(length * .5), el.getPointAtLength(length));
+  return intervals.map(percent => el.getPointAtLength(percent * length)).map(point2vec);
+}
+
+// convert paths to points
+const processSVG = el => {
+  // get paths in order of file
+  // in illustrator this should be the layer order
+  // ONLY PATHS ARE SUPPORTED!!
+  // ALSO CLOSED PATHS DON'T WORK I THINK
+  paths = Array.from(el.getElementsByTagName('path'));
+  // convert each path to points
+  return paths.map(pathToPoints);
+}
+
+// convert points to a CSV string
+const pointsToCSV = points => {
+  return points.map(path => {
+    return path.map(pair => {
+      return pair.join(",");
+    }).join("\n");
+  }).join("\n-1,0\n-1,1\n");
+}
+
+// make it so clicking download downloads the file as CSV
+const prepareDownload = (points, name) => {
+  // convert data to CSV string
+  data = pointsToCSV(points);
+  console.log(data)
+  // create a blob for the data
+  const blob = new Blob([data], {type: 'text/csv'});
+  // set file name for download
+  download.setAttribute('download', `${name}.csv`);
+  // create url for blob and set it
+  blobURL = window.URL.createObjectURL(blob);
+  download.setAttribute('href', blobURL);
+}
+
+// normalize points against maximum bounds of dimensions
+const normalize = (points, dimensions) => {
+  return points.map(p => {
+    return p.map(p => [1- p[0]/dimensions[0], 1- p[1]/dimensions[1]])
+  })
+}
+
+const uploaded = el => {
+  // get the file (first if multiple)
+  file = el.target.files[0];
+  name = file.name;
+  console.log(name);
+  // read as plaintext
+  var reader = new FileReader();
+    reader.readAsText(file, "UTF-8");
+    reader.onload = function (e) {
+      // add the SVG to DOM
+      // this way we can see it and use the browser SVG renderer
+      // to do the heavy lifting
+      text = e.target.result;
+      svgDOM.innerHTML = text;
+      rawPoints = processSVG(svgDOM);
+      // normalize against viewbox
+      viewbox = svgDOM.getElementsByTagName('svg')[0].viewBox.baseVal;
+      dimensions = [viewbox.width, viewbox.height];
+      points = normalize(rawPoints, dimensions);
+      prepareDownload(points, name);
+    }
+}
+
+upload.addEventListener('change', uploaded);
+</script>
+</script>
+</body>
+</html>
